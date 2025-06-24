@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import List, Optional
 
 import matplotlib
-import pandas as pd
 import numpy as np
+import pandas as pd
+from crsutil.plot.building_blocks.save_plot import save_plt_plot
+from crsutil.plot.plotly_functions.bar_plots_plotly import create_plotly_bar_plot
 from crsutil.plot.PlottingFrameworkPlotly import PlottingFrameworkPlotly
 from docx import Document
 from docx.shared import Inches
@@ -23,11 +25,8 @@ from riskmodels.metrics.hhi import calc_hhi
 from riskmodels.plot.plot_utils import plotly_migration_matrix, plotly_psi
 from riskmodels.plot.reviewofestimates.plot_roe_utils import (
     plot_discriminatory_power_over_time,
-    plot_roe_weighted_distributions,
 )
 from riskmodels.representativeness import calc_frequency
-from crsutil.plot.building_blocks.save_plot import save_plt_plot
-from crsutil.plot.plotly_functions.bar_plots_plotly import create_plotly_bar_plot
 
 from backend.helpers import (
     clean_and_prepare_data,
@@ -56,56 +55,27 @@ llm = AzureChatOpenAI(
 
 # ------------------- Tools -------------------
 def plot_roe_distribution_tool_wrapper(
-    csv_file_path: str,
-    var_name: str,
-    plot_group_by: str = "",
-    weights: str = ""
+    csv_file_path: str, var_name: str, plot_group_by: str = "", weights: str = ""
 ) -> str:
     """
     Handles CSV data for ROE plotting by creating weighted distributions. The resulting file name will have '_distribution_weighted_by_<weights>' in it.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data to be plotted.
-        The CSV should have the expected columns required for analysis.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data to be plotted. The CSV should have the expected columns required for analysis.
+        var_name (str): Name of the variable in the DataFrame for which the distribution plot is desired. This corresponds to a column name in the CSV file.
+        plot_group_by (Optional[str]): Variable name for grouping plots. Usually corresponds to a categorical column in the data. When specified, the plot will show distributions per group (default is empty, implying no grouping).
+        weights (Optional[str]): Specifies the column name used to weight distribution plots. Useful for metrics like exposure or expected loss; applies weighted counts if given (default is empty).
 
-    var_name : str
-        Name of the variable in the DataFrame for which the distribution plot is desired.
-        This corresponds to a column name in the CSV file.
-
-    output_path : str
-        Directory path where the output plot files will be saved.
-        Ensure valid write permissions exist for the specified path.
-
-    pfw_obj : PlottingFramework
-        An instance of the PlottingFramework class used to configure plot settings.
-        This object manages aesthetics and saving configurations for the plots.
-
-    plot_group_by : str, optional
-        Variable name for grouping plots. Usually corresponds to a categorical column in the data.
-        When specified, the plot will show distributions per group (default is empty, implying no grouping).
-
-    show_plots_notebook : bool, optional
-        Flag to indicate if plots should be rendered within Jupyter Notebook environments.
-        Default is True to showcase plots interactively within supported interfaces.
-
-    weights : str, optional
-        Specifies the column name used to weight distribution plots.
-        Useful for metrics like exposure or expected loss; applies weighted counts if given (default is empty).
-
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
 
     """
 
     try:
         # Create pfw_obj manually
-        pfw_obj=PlottingFrameworkPlotly()
+        pfw_obj = PlottingFrameworkPlotly()
         pfw_obj.load_corporate_design_d_fine()
-        pfw_obj.plot_params_dict['yaxis']['automargin'] =True   
+        pfw_obj.plot_params_dict["yaxis"]["automargin"] = True
 
         # Verify CSV file path
         data_path = Path(csv_file_path)
@@ -114,7 +84,7 @@ def plot_roe_distribution_tool_wrapper(
 
         # Read CSV and create DataFrame
         df_in = clean_and_prepare_data(csv_file_path, var_name, weights, plot_group_by)
-        
+
         # Call the plot function
         output_path = OUTPUT_DIR
 
@@ -134,7 +104,7 @@ def plot_roe_distribution_tool_wrapper(
                 if weights != "":
                     lcounts, lbin_edges = np.histogram(
                         df_in.loc[df_in[plot_group_by] == hue, var_name],
-                        bins = [1,2,3,4,5,6,7],
+                        bins=[1, 2, 3, 4, 5, 6, 7],
                         weights=df_in.loc[df_in[plot_group_by] == hue, weights],
                     )
                     plot_title = f"{var_name}_distribution_weighted_by_{y_label}"
@@ -150,7 +120,9 @@ def plot_roe_distribution_tool_wrapper(
                     bin_edges.append(lbin_edges[counter])
                     hue_arr.append(lhue[counter])
 
-            df = pd.DataFrame({"xvals": bin_edges, "yvals": counts, plot_group_by: hue_arr})
+            df = pd.DataFrame(
+                {"xvals": bin_edges, "yvals": counts, plot_group_by: hue_arr}
+            )
 
             fig = create_plotly_bar_plot(
                 data=df,
@@ -188,14 +160,13 @@ def plot_roe_distribution_tool_wrapper(
             fig=fig,
             plot_title=plot_title,
             output_dir_path=output_path,
-    )
+        )
 
-
-        
         return f"ROE distribution plot successfully created. Figure: {fig}"
     except Exception as e:
         return f"Error during ROE distribution plotting: {e}"
-    
+
+
 # Create the tool using StructuredTool from function
 plot_roe_distribution_tool = StructuredTool.from_function(
     func=plot_roe_distribution_tool_wrapper,
@@ -212,38 +183,25 @@ def plot_roe_discriminatory_power_wrapper(
     method: str = "somers_d",
 ) -> str:
     """
-    Calculates and plots the discriminatory power (AUROC, Somers' D or Gini coefficient) 
-    for the CSV data in the ROE.
+    Calculates and plots the discriminatory power (AUROC, Somers' D or Gini coefficient) for the CSV data in the ROE.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data to be plotted.
-        The CSV should have the expected columns required for analysis.
-    plot_by_time_var: str
-        (time) variable over which the discriminatory power is plottet. This is the reporting date.
-    var_list : List[str]
-        List of column names of the variables for which the discriminatory power metric
-        should be calculated. This is the pd (probability of default) or the lgd (loss given default).
-    target : str
-        The name of the target variable the variables should be compared against, e.g. the default flag.
-    method: str
-        Method of discriminatory power analysis to be performed: 'somers_d' (also refered to as Somers' D, Somers D or Somer's D),
-        'gini', or 'spearman'.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data to be plotted. The CSV should have the expected columns required for analysis.
+        plot_by_time_var (str): (time) variable over which the discriminatory power is plotted. This is the reporting date.
+        var_list (List[str]): List of column names of the variables for which the discriminatory power metric should be calculated. This is the pd (probability of default) or the lgd (loss given default).
+        target (str): The name of the target variable the variables should be compared against, e.g. the default flag.
+        method (Optional[str]): Method of discriminatory power analysis to be performed: 'somers_d' (also refered to as Somers' D, Somers D or Somer's D), 'gini', or 'spearman'.
 
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
     """
 
     try:
         # Create pfw_obj manually
         pfw_obj = PlottingFrameworkPlotly()
         pfw_obj.load_corporate_design_d_fine()
-        pfw_obj.plot_params_dict['yaxis']['automargin'] =True   
-        
+        pfw_obj.plot_params_dict["yaxis"]["automargin"] = True
+
         # Verify CSV file path
         data_path = Path(csv_file_path)
         if not data_path.exists():
@@ -278,9 +236,15 @@ def plot_roe_discriminatory_power_wrapper(
             min_num_observations_for_bootstrapping=5,
         )
 
-        os.remove(Path(output_path) / Path(f'{method}_for_{var_list[0]}_by_{plot_by_time_var}_and_sample.html'))
-        os.remove(Path(output_path) / Path(f'{method}_for_{var_list[0]}_by_{plot_by_time_var}_and_sample.png'))
-        
+        os.remove(
+            Path(output_path)
+            / Path(f"{method}_for_{var_list[0]}_by_{plot_by_time_var}_and_sample.html")
+        )
+        os.remove(
+            Path(output_path)
+            / Path(f"{method}_for_{var_list[0]}_by_{plot_by_time_var}_and_sample.png")
+        )
+
         return f"Discriminatory power plot successfully created. Figure: {fig}"
     except Exception as e:
         return f"Error during discriminatory power plotting: {e}"
@@ -305,23 +269,14 @@ def calc_migration_matrix_wrapper(
 
     If a id/customer/facility doesn't have an entry at given_year-1 the transition is attributed to the rating class 0.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data for which the migration matrix is calculated.
-        The CSV should have the expected columns required for analysis.
-    given_year: bool
-        The year to which the migration is calculated.
-    unique_id: bool
-        The name of the existing column containing the unique identifier in the dataset.
-    rating_class_column: bool
-        The name of the existing column containing the rating class in the dataset.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data for which the migration matrix is calculated. The CSV should have the expected columns required for analysis.
+        given_year (int): The year to which the migration is calculated.
+        unique_id (str): The name of the existing column containing the unique identifier in the dataset.
+        rating_class_column (str): The name of the existing column containing the rating class in the dataset.
 
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
     """
 
     try:
@@ -374,30 +329,21 @@ def plot_migration_matrix_wrapper(
     """
     Plot a migration matrix.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data to be plotted.
-        The CSV should have the data for the migration matrix that is plotted.
-    title : Optional[str]
-         The title of the plot.
-    x_label : Optional[str]
-        The x-label of the plot.
-    y_label : Optional[str]
-        The y-label of the plot.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data to be plotted. The CSV should have the data for the migration matrix that is plotted.
+        title (Optional[str]): The title of the plot.
+        x_label (Optional[str]): The x-label of the plot.
+        y_label (Optional[str]): The y-label of the plot.
 
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
     """
 
     try:
         # Create pfw_obj manually
         pfw_obj = PlottingFrameworkPlotly()
         pfw_obj.load_corporate_design_d_fine()
-        pfw_obj.plot_params_dict['yaxis']['automargin'] =True   
+        pfw_obj.plot_params_dict["yaxis"]["automargin"] = True
 
         # Verify CSV file path
         data_path = Path(csv_file_path)
@@ -442,22 +388,16 @@ def calc_matrix_weighted_bandwidth_wrapper(
 ) -> str:
     """
     Calculate the upper and lower weighted bandwidth of the migration matrix.
-
     This implementation aligns with the Equations presented in "Instructions for reporting the validation results of
     internal models IRB Pillar I models for credit risk". Please note that we used the absolute migrations from the
     input matrix such that we did not need to multiply the equations with the numbers of customers in the original
     rating grades.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the matrix for which the bandwidth is calculated.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the matrix for which the bandwidth is calculated.
 
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
     """
     try:
         # Verify CSV file path
@@ -494,23 +434,14 @@ def calc_psi_wrapper(
     """
     Creates two samples based on the provided date and calculates the PSI of the rating classes of these samples.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data for which the PSI is calculated.
-        The CSV should have the expected columns required for analysis.
-    reporting_date_var: bool
-        The name of the existing column containing the reporting date.
-    rating_class_column: bool
-        The name of the existing column containing the rating class in df_in.
-    date_to_split_samples: str
-        The date on which the dataset is split into "old" and "new" subsets.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data for which the PSI is calculated. The CSV should have the expected columns required for analysis.
+        reporting_date_var (str): The name of the existing column containing the reporting date.
+        rating_class_column (str): The name of the existing column containing the rating class in df_in.
+        date_to_split_samples (str): The date on which the dataset is split into "old" and "new" subsets.
 
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
     """
 
     try:
@@ -553,7 +484,7 @@ def calc_psi_wrapper(
             inplace=True,
         )
 
-        smpl_filename = f"rating_frequency_samples.csv"
+        smpl_filename = "rating_frequency_samples.csv"
         output_path = OUTPUT_DIR / smpl_filename
         freq_df.to_csv(output_path, index=False)
 
@@ -584,24 +515,18 @@ def plot_psi_wrapper(
     """
     Plot the results of the psi calculation.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data from the frequency analysis. This dataframe is build and calculated in
-        calc_plotly_wrapper function.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data from the frequency analysis. This dataframe is build and calculated in calc_plotly_wrapper function.
 
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
     """
 
     try:
         # Create pfw_obj manually
         pfw_obj = PlottingFrameworkPlotly()
         pfw_obj.load_corporate_design_d_fine()
-        pfw_obj.plot_params_dict['yaxis']['automargin'] =True   
+        pfw_obj.plot_params_dict["yaxis"]["automargin"] = True
 
         # Verify CSV file path
         data_path = Path(csv_file_path)
@@ -646,23 +571,14 @@ def calc_hhi_wrapper(
     """
     Creates two samples based on the provided date and calculates the HHI's of the rating classes of these samples.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data for which the PSI is calculated.
-        The CSV should have the expected columns required for analysis.
-    reporting_date_var: bool
-        The name of the existing column containing the reporting date.
-    rating_class_column: bool
-        The name of the existing column containing the rating class in df_in.
-    date_to_split_samples: str
-        The date on which the dataset is split into "old" and "new" subsets.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data for which the PSI is calculated. The CSV should have the expected columns required for analysis.
+        reporting_date_var (str): The name of the existing column containing the reporting date.
+        rating_class_column (str): The name of the existing column containing the rating class in df_in.
+        date_to_split_samples (str): The date on which the dataset is split into "old" and "new" subsets.
 
-    Returns
-    -------
-    str
-        Success message indicating completion of the plot creation process or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating completion of the plot creation process or an error message detailing issues.
     """
 
     try:
@@ -733,19 +649,12 @@ def calc_unique_values_wrapper(
     """
     Determines the unique values for a given column in the provided csv file.
 
-    Parameters
-    ----------
-    csv_file_path : str
-        Path to the CSV file containing the data.
-        The CSV should have the expected columns required for analysis.
-    column_name: str
-        The name of the existing column.
+    Args:
+        csv_file_path (str): Path to the CSV file containing the data. The CSV should have the expected columns required for analysis.
+        column_name (str): The name of the existing column.
 
-    Returns
-    -------
-    str
-        Success message indicating the unique values in the given column or an error message detailing issues.
-
+    Returns:
+        str: Success message indicating the unique values in the given column or an error message detailing issues.
     """
 
     try:
@@ -775,7 +684,14 @@ calc_unique_values_tool = StructuredTool.from_function(
 
 @tool
 def summarize_chart(output_dir: Path) -> List[str]:
-    """Summarize the content of all chart images in the specified directory."""
+    """Summarize the content of all chart images in the specified directory.
+
+    Args:
+        output_dir (Path): Path to the folder containing chart image files.
+
+    Returns:
+        List[str]: A list of textual summaries for each chart or error messages if encountered.
+    """
     summaries = []
     try:
         image_paths = get_image_paths(output_dir)
@@ -819,7 +735,15 @@ def summarize_chart(output_dir: Path) -> List[str]:
 
 @tool
 def create_word_document(summaries: List[str], output_dir: Path) -> str:
-    """Generate a Word document containing summaries and chart images using contextual matching."""
+    """Generate a Word document containing summaries and chart images using contextual matching.
+
+    Args:
+        summaries (List[str]): List of chart summaries to include in the document. Summaries should be in the same order as the chart images, and separated by commas.
+        output_dir (Path): Path to the folder containing chart image files.
+
+    Returns:
+        str: Path to the generated Word document or error message if failed.
+    """
     try:
         doc = Document()
         doc.add_heading("AI-Generated Report", level=1)
@@ -841,7 +765,10 @@ def create_word_document(summaries: List[str], output_dir: Path) -> str:
             matched_image_path = None
             for image_path in image_paths:
                 # Allow for fuzzy matching based on presence of keywords in the filename
-                if any(part.lower().replace(" ", "_") in image_path.stem.lower() for part in standard_keyword.split()):
+                if any(
+                    part.lower().replace(" ", "_") in image_path.stem.lower()
+                    for part in standard_keyword.split()
+                ):
                     matched_image_path = image_path
                     print(f"Matched image: {matched_image_path}")  # Debugging
                     break
@@ -850,7 +777,7 @@ def create_word_document(summaries: List[str], output_dir: Path) -> str:
                 doc.add_heading(title.replace("Summary", "").strip(), level=2)
                 with open(matched_image_path, "rb") as img_file:
                     doc.add_picture(img_file, width=Inches(5))
-            
+
             # Explicit handling for special cases like bandwidth and HHI
             # Assume these are text summaries and ensure they're appended accordingly
 

@@ -38,20 +38,22 @@ st.set_page_config(page_title="Agentic Report Generator", layout="wide")
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-st.title("🤖 Agentic Review of Estimates Report Generator")
+st.title("Review of Estimates - Agentic Report Generator")
 
 # Tabs
-tab1, tab2, tab3 = st.tabs(["Data Viewer", "Report Generation", "Thinking Process"])
+tab1, tab2, tab3, tab4 = st.tabs(
+    [
+        "🔍 Data Viewer",
+        "📝 Report Generation",
+        "🧠 Agentic Thinking",
+        "🕸️ Agentic Architecture",
+    ]
+)
 
 # ---------------- Tab 1: Data Upload ----------------
 with tab1:
-    # uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
-
-    # if uploaded_file:
     file_path = "synthetic_credit_risk_data_20250606.csv"
-    # with open(file_path, "wb") as f:
-    #    f.write(uploaded_file.getbuffer())
-    # st.success("File uploaded successfully!")
+
     if os.path.exists(file_path):
         df = pd.read_csv(file_path, delimiter=",")
         st.write(f"**Preview of {file_path}:**")
@@ -76,8 +78,8 @@ with tab2:
             for file in OUTPUT_DIR.glob("*"):
                 try:
                     file.unlink()
-                except Exception as e:
-                    st.warning(f"Failed to delete {file.name}: {e}")
+                except Exception:
+                    pass
 
             message = {
                 "role": "user",
@@ -148,9 +150,9 @@ with tab3:
             )
         elif isinstance(msg, AIMessage):
             return (
-                f"{step}:&nbsp;&nbsp;&nbsp;&nbsp;**AI Message from `{msg.name}` 🤖**"
+                f"{step}:&nbsp;&nbsp;&nbsp;&nbsp;**AI Message from `{msg.name}` 🧠**"
                 if msg.name
-                else f"{step}:&nbsp;&nbsp;&nbsp;&nbsp;**AI Message 🤖**"
+                else f"{step}:&nbsp;&nbsp;&nbsp;&nbsp;**AI Message 🧠**"
             )
         else:
             return "❓ Unknown message type"
@@ -188,3 +190,14 @@ with tab3:
         st.warning(
             "No thinking process of agents to display. Please generate a report first."
         )
+
+# ---------------- Tab 4: Agent Architecture ----------------
+with tab4:
+    try:
+        img_bytes = supervisor.get_graph().draw_mermaid_png()
+        if img_bytes:
+            st.image(img_bytes, use_container_width=False)
+        else:
+            st.warning("Unable to render architecture diagram.")
+    except Exception as e:
+        st.error(f"Failed to generate agent graph: {e}")
