@@ -95,9 +95,21 @@ with tab2:
                 history.append({"role": "assistant", "content": latest_assistant_msg})
             history.append({"role": "user", "content": message["content"]})
 
-            with st.spinner("Generating report... Please wait."):
+            with st.spinner("Hang tight - your report is underway ..."):
+                status_placeholder = st.empty()  # Placeholder for live status updates
                 for chunk in supervisor.stream({"messages": history}):
+                    agent_name = list(chunk.keys())[0]
+                    readable_name = agent_name.replace("_", " ").strip()
+
+                    # Update status dynamically
+                    status_placeholder.markdown(
+                        f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🧠 `{readable_name}` is thinking ..."
+                    )
+
                     st.session_state.chat_history.append(chunk)
+
+                # Clear the status placeholder after processing
+                status_placeholder.empty()
 
             report_docx = OUTPUT_DIR / "AI_Agent_Summary_Final.docx"
             if report_docx.exists():

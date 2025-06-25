@@ -6,6 +6,7 @@ import pandas as pd
 OUTPUT_DIR = Path("./outputs")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+
 def clean_and_prepare_data(file_path, var_name, weights, plot_group_by):
     """Read and clean data."""
     df = pd.read_csv(file_path)
@@ -23,7 +24,7 @@ def clean_and_prepare_data(file_path, var_name, weights, plot_group_by):
 
 def get_image_paths(directory: Path, pattern: str = "*.[pP][nN][gG]") -> List[Path]:
     """Retrieve all image paths from the given directory matching the pattern."""
-    return sorted(directory.glob(pattern))
+    return sorted(directory.glob(pattern), key=lambda p: p.name.lower())
 
 
 def extract_title_from_summary(summary: str) -> str:
@@ -32,17 +33,38 @@ def extract_title_from_summary(summary: str) -> str:
     keyword_map = {
         "PSI": ["psi", "PSI"],
         "HHI": ["hhi", "HHI"],
-        "Migration Matrix": ["migration matrix", "Migration Matrix", "migration_matrix", "Migration-Matrix"],
-        "Discriminatory Power": ["discriminatory power", "Discriminatory Power", "discriminatory_power", "Discriminatory-Power", "discriminatory", "somers_d", "Somers_d", "Somers_D", "Somer's D", "Somer's d"],
-        "Distribution": ["distribution", "Distribution", "distribution_chart", "Distribution-Chart"],
+        "Migration Matrix": [
+            "migration matrix",
+            "Migration Matrix",
+            "migration_matrix",
+            "Migration-Matrix",
+        ],
+        "Discriminatory Power": [
+            "discriminatory power",
+            "Discriminatory Power",
+            "discriminatory_power",
+            "Discriminatory-Power",
+            "discriminatory",
+            "somers_d",
+            "Somers_d",
+            "Somers_D",
+            "Somer's D",
+            "Somer's d",
+        ],
+        "Distribution": [
+            "distribution",
+            "Distribution",
+            "distribution_chart",
+            "Distribution-Chart",
+        ],
     }
-    
+
     # Loop through the keyword map to find appropriate matches
     for standard_keyword, variations in keyword_map.items():
         for variation in variations:
             if variation in summary:
                 return f"{standard_keyword} Chart Summary"
-    
+
     return "Chart Summary"  # Default title if no matches are found.
 
 
@@ -92,7 +114,6 @@ def create_sample_func(
             smpl_filename = f"{file_name}_{key}.csv"
             output_path = OUTPUT_DIR / smpl_filename
             dataframe.to_csv(output_path, index=False)
-            print(f"Document saved: {output_path}")
 
         return sample_dict
     except Exception as e:

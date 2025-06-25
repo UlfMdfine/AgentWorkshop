@@ -699,7 +699,6 @@ def summarize_chart(output_dir: Path) -> List[str]:
             return ["Error: No images found in the specified directory."]
 
         for chart_image_path in image_paths:
-            print(f"Summarizing chart: {chart_image_path}")
             if not os.path.exists(chart_image_path):
                 summaries.append(f"Error: Chart image '{chart_image_path}' not found.")
                 continue
@@ -716,7 +715,9 @@ def summarize_chart(output_dir: Path) -> List[str]:
                         "Avoid obvious descriptions and instead infer meaningful patterns or anomalies. "
                         "Do not state that the summary is generated. "
                         "Provide a concise, insight-oriented summary suitable for including in a professional report."
-                        "Use clear formatting (e.g., paragraphs) to make it easy to copy into a readable Word report.",
+                        "Use clear formatting (e.g., paragraphs) to make it easy to copy into a readable Word report."
+                        f"Make sure that all words in the image's file name {chart_image_path} appear at least once within the summary text, ignoring special characters like '_' and the file ending '.png'."
+                        "Include the words from the file name (separated by '_' and ignoring '.png') naturally throughout the summary text, without the entire name appearing as a string.",
                     },
                     {
                         "type": "image_url",
@@ -734,12 +735,14 @@ def summarize_chart(output_dir: Path) -> List[str]:
 
 
 @tool
-def create_word_document(summaries: List[str], output_dir: Path) -> str:
+def create_word_document(
+    output_dir: Path, summaries: Optional[List[str]] = None
+) -> str:
     """Generate a Word document containing summaries and chart images using contextual matching.
 
     Args:
-        summaries (List[str]): List of chart summaries to include in the document. Summaries should be in the same order as the chart images, and separated by commas.
         output_dir (Path): Path to the folder containing chart image files.
+        summaries (Optional[List[str]]): List of chart summaries to include in the document, separated by commas. Only use summaries provided by the Commentary Agent, and set to None if no summaries are available.
 
     Returns:
         str: Path to the generated Word document or error message if failed.
@@ -749,37 +752,36 @@ def create_word_document(summaries: List[str], output_dir: Path) -> str:
         doc.add_heading("AI-Generated Report", level=1)
 
         image_paths = get_image_paths(output_dir)
-        print(f"Image paths: {image_paths}")  # Debugging
 
-        for summary in summaries:
-            title = extract_title_from_summary(summary)
-            doc.add_heading(title, level=2)
-            doc.add_paragraph(summary)
-            doc.add_paragraph("")  # Add separation between sections
+        if summaries:
+            for summary in summaries:
+                title = extract_title_from_summary(summary)
+                doc.add_heading(title, level=2)
+                doc.add_paragraph(summary)
+                doc.add_paragraph("")  # Add separation between sections
 
-            # Extract keywords using the previously implemented function
-            standard_keyword = title.replace(" Chart Summary", "")
-            print(f"Standard keyword: {standard_keyword}")  # Debugging
+                # Extract keywords using the previously implemented function
+                standard_keyword = title.replace(" Chart Summary", "")
 
-            # Matching logic based on keyword presence in filenames
-            matched_image_path = None
+                # Matching logic based on keyword presence in filenames
+                matched_image_path = None
+                for image_path in image_paths:
+                    # Allow for fuzzy matching based on presence of keywords in the filename
+                    if any(
+                        part.lower().replace(" ", "_") in image_path.stem.lower()
+                        for part in standard_keyword.split()
+                    ):
+                        matched_image_path = image_path
+                        break
+
+                if matched_image_path:
+                    doc.add_heading(title.replace("Summary", "").strip(), level=2)
+                    with open(matched_image_path, "rb") as img_file:
+                        doc.add_picture(img_file, width=Inches(5))
+        else:
             for image_path in image_paths:
-                # Allow for fuzzy matching based on presence of keywords in the filename
-                if any(
-                    part.lower().replace(" ", "_") in image_path.stem.lower()
-                    for part in standard_keyword.split()
-                ):
-                    matched_image_path = image_path
-                    print(f"Matched image: {matched_image_path}")  # Debugging
-                    break
-
-            if matched_image_path:
-                doc.add_heading(title.replace("Summary", "").strip(), level=2)
-                with open(matched_image_path, "rb") as img_file:
+                with open(image_path, "rb") as img_file:
                     doc.add_picture(img_file, width=Inches(5))
-
-            # Explicit handling for special cases like bandwidth and HHI
-            # Assume these are text summaries and ensure they're appended accordingly
 
         output_path = output_dir / "AI_Agent_Summary_Final.docx"
         doc.save(output_path)
